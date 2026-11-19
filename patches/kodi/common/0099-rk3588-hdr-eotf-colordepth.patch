@@ -1,0 +1,59 @@
+diff -ruN a/xbmc/cores/VideoPlayer/VideoRenderers/HwDecRender/VideoLayerBridgeDRMPRIME.cpp b/xbmc/cores/VideoPlayer/VideoRenderers/HwDecRender/VideoLayerBridgeDRMPRIME.cpp
+--- a/xbmc/cores/VideoPlayer/VideoRenderers/HwDecRender/VideoLayerBridgeDRMPRIME.cpp	2026-11-19 08:53:37
++++ b/xbmc/cores/VideoPlayer/VideoRenderers/HwDecRender/VideoLayerBridgeDRMPRIME.cpp	2026-11-19 08:53:48
+@@ -43,6 +43,8 @@
+   // disable video plane
+   m_DRM->AddProperty(plane, "FB_ID", 0);
+   m_DRM->AddProperty(plane, "CRTC_ID", 0);
++  if (plane->SupportsProperty("EOTF"))
++    m_DRM->AddProperty(plane, "EOTF", 0);
+ }
+ 
+ void CVideoLayerBridgeDRMPRIME::Acquire(CVideoBufferDRMPRIME* buffer, uint32_t fbId)
+@@ -208,6 +210,16 @@
+       plane->GetPropertyEnumValue("COLOR_RANGE", GetColorRange(picture));
+   if (colorRange)
+     m_DRM->AddProperty(plane, "COLOR_RANGE", colorRange.value());
++
++  if (plane->SupportsProperty("EOTF"))
++  {
++    uint64_t eotfVal = 0; // HDMI_EOTF_TRADITIONAL_GAMMA_SDR
++    if (picture.color_transfer == AVCOL_TRC_SMPTE2084)
++      eotfVal = 2; // HDMI_EOTF_SMPTE_ST2084
++    else if (picture.color_transfer == AVCOL_TRC_ARIB_STD_B67)
++      eotfVal = 3; // HDMI_EOTF_BT_2100_HLG
++    m_DRM->AddProperty(plane, "EOTF", eotfVal);
++  }
+ }
+ 
+ void CVideoLayerBridgeDRMPRIME::SetVideoPlane(CVideoBufferDRMPRIME* buffer, const CRect& destRect)
+diff -ruN a/xbmc/windowing/gbm/WinSystemGbm.cpp b/xbmc/windowing/gbm/WinSystemGbm.cpp
+--- a/xbmc/windowing/gbm/WinSystemGbm.cpp	2026-11-19 08:53:38
++++ b/xbmc/windowing/gbm/WinSystemGbm.cpp	2026-11-19 08:53:48
+@@ -524,6 +524,12 @@
+     {
+       CLog::LogF(LOGDEBUG, "clearing HDR_OUTPUT_METADATA");
+       drm->AddProperty(connector, "HDR_OUTPUT_METADATA", 0);
++      if (connector->SupportsProperty("color_depth"))
++      {
++        auto depth = connector->GetPropertyEnumValue("color_depth", "Automatic");
++        if (depth)
++          drm->AddProperty(connector, "color_depth", depth.value());
++      }
+       drm->SetActive(true);
+ 
+       m_hdrBlob.Reset();
+@@ -543,6 +549,13 @@
+ 
+   KODI::UTILS::Eotf eotf = KODI::UTILS::GetEOTF(*videoPicture);
+   m_eotf = eotf;
++
++  if (connector->SupportsProperty("color_depth"))
++  {
++    auto depth = connector->GetPropertyEnumValue("color_depth", "30bit");
++    if (depth)
++      drm->AddProperty(connector, "color_depth", depth.value());
++  }
+ 
+   if (connector->SupportsProperty("HDR_OUTPUT_METADATA") && m_info &&
+       m_info->SupportsHDRStaticMetadataType1() && m_info->SupportsEOTF(eotf))
